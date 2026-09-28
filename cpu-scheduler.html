@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="th">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="playback.css">
+<script src="scheduler.js"></script>
+<title>CPU Scheduling Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap">
+
+<style>
+:root {
+  --bg: #f0f2f8;
+  --surface: #ffffff;
+  --surface-alt: #f4f6fc;
+  --border: #dde3f0;
+  --border-strong: #c3cde8;
+  --text: #1a1f36;
+  --text-muted: #5e6889;
+  --accent: #4f46e5;
+  --accent-lt: #6366f1;
+  --accent-bg: rgba(79,70,229,0.08);
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --idle-bg: #e2e8f0;
+  --idle-fg: #94a3b8;
+  --mono: 'JetBrains Mono', 'Consolas', monospace;
+  --sans: 'Inter', system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-alt: #1c2130;
+    --border: #30363d;
+    --border-strong: #484f58;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #6366f1;
+    --accent-lt: #818cf8;
+    --accent-bg: rgba(99,102,241,0.12);
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #f85149;
+    --idle-bg: #21262d;
+    --idle-fg: #6e7681;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-alt: #1c2130;
+  --border: #30363d;
+  --border-strong: #484f58;
+  --text: #c9d1d9;
+  --text-muted: #8b949e;
+  --accent: #6366f1;
+  --accent-lt: #818cf8;
+  --accent-bg: rgba(99,102,241,0.12);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #f85149;
+  --idle-bg: #21262d;
+  --idle-fg: #6e7681;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  padding-inline: 16px;
+  padding-block: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100%;
+}
+
+/* ─── HEADER ─── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 0.875rem;
+  border-bottom: 1px solid var(--border);
+  margin-inline: -16px;
+  padding-inline: 20px;
+  margin-bottom: 1.25rem;
+  background: var(--bg);
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+}
+.logo-row { display: flex; align-items: center; gap: 0.625rem; }
+.logo-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--accent); display: flex; align-items: center;
+  justify-content: center; font-size: 17px; flex-shrink: 0;
+}
+.logo-title { font-size: 0.9375rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+.logo-sub { font-size: 0.68rem; color: var(--text-muted); }
+.theme-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px; transition: background 0.15s; flex-shrink: 0;
+}
+.theme-btn:hover { background: var(--surface-alt); }
+
+/* ─── LAYOUT ─── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 1.125rem;
+  margin-bottom: 1.125rem;
+  align-items: start;
+}
+@media (max-width: 800px) { .main-grid { grid-template-columns: 1fr; } }
+
+/* ─── CARD ─── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.card-header {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-alt);
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.card-title {
+  font-size: 0.75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted);
+}
+.card-body { padding: 0.875rem; }
+
+/* ─── FORM ─── */
+.form-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr 32px;
+  gap: 0.4rem; align-items: end; margin-bottom: 0.625rem;
+}
+.fg { display: flex; flex-direction: column; gap: 0.2rem; }
+.fl {
+  font-size: 0.67rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted);
+}
+input[type="text"], input[type="number"], select {
+  font-family: var(--sans); font-size: 0.8125rem;
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text);
+  padding: 0.375rem 0.5rem; width: 100%;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input[type="number"] { font-family: var(--mono); }
+input:focus, select:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+/* ─── BUTTONS ─── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 0.3rem; padding: 0.375rem 0.75rem; border: none;
+  border-radius: 6px; font-family: var(--sans); font-size: 0.8rem;
+  font-weight: 500; cursor: pointer; transition: all 0.12s; white-space: nowrap;
+}
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { filter: brightness(1.12); }
+.btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--surface-alt); color: var(--text); }
+.btn-icon { padding: 0; width: 28px; height: 28px; border-radius: 5px; font-size: 12px; }
+.btn-del { background: transparent; color: var(--danger); border: 1px solid transparent; padding: 0.2rem 0.4rem; font-size: 0.75rem; border-radius: 4px; }
+.btn-del:hover { background: rgba(220,38,38,0.1); border-color: var(--danger); }
+.btn-run {
+  background: var(--accent); color: #fff;
+  padding: 0.55rem 1.75rem; font-size: 0.9375rem;
+  font-weight: 600; border-radius: 8px; border: none;
+  cursor: pointer; transition: all 0.15s; font-family: var(--sans);
+}
+.btn-run:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(79,70,229,0.35); }
+
+/* ─── PROCESS TABLE ─── */
+.ptbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.ptbl th {
+  font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text-muted);
+  padding: 0.3rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border);
+}
+.ptbl td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.ptbl tr:last-child td { border-bottom: none; }
+.ptbl tbody tr:hover td { background: var(--accent-bg); }
+.pid-cell { display: flex; align-items: center; gap: 0.35rem; font-weight: 600; font-family: var(--mono); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ─── ALGO CONFIG ─── */
+.radio-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem; }
+.rpill {
+  display: flex; align-items: center; gap: 0.3rem; cursor: pointer;
+  font-size: 0.775rem; padding: 0.275rem 0.65rem; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--surface-alt);
+  transition: all 0.12s; user-select: none;
+}
+.rpill input { display: none; }
+.rpill.on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-lt); font-weight: 600; }
+
+.info-chip {
+  font-size: 0.75rem; background: var(--surface-alt);
+  border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0; padding: 0.5rem 0.75rem;
+  color: var(--text-muted); line-height: 1.55; margin-top: 0.625rem;
+}
+
+/* ─── RUN BAR ─── */
+.run-bar {
+  display: flex; gap: 0.75rem; align-items: center;
+  padding: 0.75rem 1rem; margin-bottom: 1.25rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; flex-wrap: wrap;
+}
+
+/* ─── METRICS GRID ─── */
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 1rem; margin-bottom: 1.25rem;
+}
+@media (max-width: 600px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } }
+.metric-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 0.875rem 1rem; text-align: center;
+}
+.metric-val {
+  font-family: var(--mono); font-size: 2rem; font-weight: 700;
+  line-height: 1.1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+}
+.metric-lbl { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 0.25rem; font-weight: 600; }
+
+/* ─── GANTT ─── */
+.gantt-scroll { overflow-x: auto; padding-bottom: 4px; }
+.grow { display: flex; height: 40px; }
+.gblk {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  color: #fff; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+  transition: filter 0.1s; overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.12); margin-right: 2px;
+}
+.gblk:last-child { margin-right: 0; }
+.gblk:hover { filter: brightness(1.15); }
+.gblk.idle {
+  background: var(--idle-bg); color: var(--idle-fg);
+  border: 1px dashed var(--border-strong); font-size: 0.65rem; letter-spacing: 0.05em;
+}
+.gtl {
+  display: flex; position: relative; height: 22px;
+  border-top: 1.5px solid var(--border-strong); margin-top: 3px;
+}
+.tick {
+  position: absolute; font-family: var(--mono); font-size: 0.65rem;
+  color: var(--text-muted); top: 3px; transform: translateX(-50%);
+}
+.tick::before { content: ''; display: block; width: 1px; height: 5px; background: var(--border-strong); margin: 0 auto 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.leg-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.73rem; color: var(--text-muted); }
+.leg-sw { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+
+/* ─── RESULTS TABLE ─── */
+.rtbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.rtbl th {
+  font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text-muted);
+  padding: 0.45rem 0.75rem; text-align: right;
+  border-bottom: 1px solid var(--border); background: var(--surface-alt);
+}
+.rtbl th:first-child { text-align: left; }
+.rtbl td {
+  padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border);
+  text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 0.8rem;
+}
+.rtbl td:first-child { text-align: left; font-family: var(--sans); }
+.rtbl tr:last-child td { border-bottom: none; }
+.rtbl tbody tr:hover td { background: var(--accent-bg); }
+.avg-row { background: var(--surface-alt) !important; font-weight: 700; }
+.avg-row td { font-family: var(--mono); }
+
+/* ─── COMPARISON TABLE ─── */
+.ctbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.ctbl th {
+  font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-muted); padding: 0.4rem 0.75rem; text-align: right;
+  background: var(--surface-alt); border-bottom: 1px solid var(--border);
+}
+.ctbl th:first-child { text-align: left; }
+.ctbl td { padding: 0.38rem 0.75rem; border-bottom: 1px solid var(--border); text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.ctbl td:first-child { font-family: var(--sans); text-align: left; }
+.ctbl tr:last-child td { border-bottom: none; }
+.ctbl tbody tr:hover td { background: var(--accent-bg); }
+.best { color: var(--success); font-weight: 700; }
+.cur-row { background: var(--accent-bg) !important; }
+
+/* ─── TAGS ─── */
+.tag { display: inline-flex; align-items: center; padding: 0.12rem 0.4rem; border-radius: 4px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.tag-blue { background: rgba(99,102,241,0.15); color: var(--accent-lt); }
+.tag-green { background: rgba(34,197,94,0.15); color: var(--success); }
+
+/* ─── EMPTY ─── */
+.empty { text-align: center; padding: 1.75rem 1rem; color: var(--text-muted); }
+.empty-icon { font-size: 2.25rem; margin-bottom: 0.5rem; }
+
+/* ─── TOOLTIP ─── */
+.tooltip {
+  position: fixed; background: var(--text); color: var(--bg);
+  padding: 0.375rem 0.625rem; border-radius: 6px; font-size: 0.72rem;
+  line-height: 1.6; pointer-events: none; z-index: 1000;
+  max-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  display: none; font-family: var(--mono); white-space: pre-line;
+}
+
+/* ─── TOAST ─── */
+.toast {
+  position: fixed; bottom: 1.25rem; right: 1.25rem;
+  background: var(--text); color: var(--bg);
+  padding: 0.55rem 1rem; border-radius: 8px;
+  font-size: 0.8rem; box-shadow: 0 4px 20px rgba(0,0,0,0.28);
+  z-index: 9999; opacity: 0; transform: translateY(8px);
+  transition: all 0.2s; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* ─── UTILS ─── */
+.flex { display: flex; }
+.gap-sm { gap: 0.4rem; }
+.gap-md { gap: 0.75rem; }
+.mt-xs { margin-top: 0.35rem; }
+.mt-sm { margin-top: 0.5rem; }
+.mt-md { margin-top: 0.75rem; }
+.text-muted { color: var(--text-muted); }
+.text-sm { font-size: 0.73rem; }
+.text-mono { font-family: var(--mono); }
+[hidden] { display: none !important; }
+</style>
+
+<div class="tooltip" id="tooltip"></div>
+<div class="toast" id="toast"></div>
+
+<!-- HEADER -->
+<header class="app-header">
+  <div class="logo-row">
+    <div class="logo-icon">⚙️</div>
+    <div>
+      <div class="logo-title">CPU Scheduling Simulator</div>
+      <div class="logo-sub">มหาวิทยาลัยกาฬสินธุ์ · สาขาวิศวกรรมคอมพิวเตอร์</div>
+    </div>
+  </div>
+  <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+</header>
+
+<!-- MAIN GRID -->
+<div class="main-grid">
+
+  <!-- ── LEFT PANEL ── -->
+  <div style="display:flex;flex-direction:column;gap:1rem">
+
+    <!-- Process input card -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">➕ Process Input</span></div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="fg">
+            <span class="fl">PID</span>
+            <input type="text" id="inp-pid" placeholder="P1" maxlength="5">
+          </div>
+          <div class="fg">
+            <span class="fl">Arrival</span>
+            <input type="number" id="inp-at" placeholder="0" min="0">
+          </div>
+          <div class="fg">
+            <span class="fl">Burst</span>
+            <input type="number" id="inp-bt" placeholder="5" min="1">
+          </div>
+          <div class="fg">
+            <span class="fl">Priority</span>
+            <input type="number" id="inp-pr" placeholder="1" min="1">
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn btn-accent btn-icon" onclick="addProcess()" title="Add (Enter)">+</button>
+          </div>
+        </div>
+
+        <div class="flex gap-sm mt-xs" style="margin-bottom:0.625rem">
+          <button class="btn btn-ghost" onclick="loadPreset()" style="font-size:0.73rem;padding:0.3rem 0.6rem">📂 ตัวอย่าง</button>
+          <button class="btn btn-ghost" onclick="clearAll()" style="font-size:0.73rem;padding:0.3rem 0.6rem">🗑 ล้าง</button>
+        </div>
+
+        <div id="proc-empty" class="empty" style="padding:1.25rem 0.5rem">
+          <div class="empty-icon">📋</div>
+          <div style="font-size:0.8rem">ยังไม่มี Process<br><span class="text-sm">กรอก BT แล้วกด +</span></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="ptbl" id="proc-tbl" hidden>
+            <thead><tr><th>Process</th><th>AT</th><th>BT</th><th>Prio</th><th></th></tr></thead>
+            <tbody id="proc-tbody"></tbody>
+          </table>
+        </div>
+        <div class="text-muted text-sm mt-xs" id="proc-count"></div>
+        <div class="text-muted text-sm mt-xs">แก้ AT, BT และ Priority ในตารางได้เลย กด Enter หรือออกจากช่องเพื่อบันทึก แล้วกด Run Simulation เพื่อดูผลใหม่</div>
+      </div>
+    </div>
+
+    <!-- Algorithm config card -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">⚙ Algorithm Config</span></div>
+      <div class="card-body">
+
+        <div class="fg" style="margin-bottom:0.625rem">
+          <span class="fl">Algorithm</span>
+          <select id="algo-sel" onchange="onAlgoChange()">
+            <option value="fcfs">First-Come First-Served (FCFS)</option>
+            <option value="sjf">Shortest-Job-First (SJF)</option>
+            <option value="rr">Round-Robin (RR)</option>
+            <option value="priority">Priority Scheduling</option>
+          </select>
+        </div>
+
+        <div class="fg" id="mode-row" style="margin-bottom:0.625rem">
+          <span class="fl">Mode</span>
+          <div class="radio-row" id="mode-pills">
+            <label class="rpill on" id="pill-np"><input type="radio" name="mode" value="np" checked onchange="syncPills('mode')">Non-Preemptive</label>
+            <label class="rpill" id="pill-p"><input type="radio" name="mode" value="p" onchange="syncPills('mode')">Preemptive</label>
+          </div>
+        </div>
+
+        <div class="fg" id="rr-row" style="margin-bottom:0.625rem" hidden>
+          <span class="fl">Time Quantum (q)</span>
+          <div class="flex gap-sm mt-xs" style="align-items:center">
+            <input type="number" id="rr-q" value="2" min="1" max="99" style="width:68px">
+            <span class="text-muted text-sm">time units</span>
+          </div>
+        </div>
+
+        <div class="fg" id="prio-row" style="margin-bottom:0.625rem" hidden>
+          <span class="fl">Priority Convention</span>
+          <div class="radio-row" id="pconv-pills">
+            <label class="rpill on" id="pill-lower"><input type="radio" name="pconv" value="lower" checked onchange="syncPills('pconv')">ตัวเลขน้อย = สูงกว่า</label>
+            <label class="rpill" id="pill-higher"><input type="radio" name="pconv" value="higher" onchange="syncPills('pconv')">ตัวเลขมาก = สูงกว่า</label>
+          </div>
+        </div>
+
+        <div style="margin-bottom:0.5rem">
+          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.8rem">
+            <input type="checkbox" id="chk-cmp" style="accent-color:var(--accent);width:auto">
+            เปรียบเทียบทุก Algorithm
+          </label>
+        </div>
+
+        <div class="info-chip" id="algo-info"></div>
+      </div>
+    </div>
+
+  </div><!-- end left -->
+
+  <!-- ── RIGHT PANEL ── -->
+  <div>
+    <!-- Placeholder -->
+    <div class="card" id="placeholder-card" style="display:flex;align-items:center;justify-content:center;min-height:260px">
+      <div class="empty">
+        <div style="font-size:3rem;margin-bottom:0.875rem">⚙️</div>
+        <div style="font-size:0.9375rem;font-weight:600;margin-bottom:0.375rem">CPU Scheduling Simulator</div>
+        <div class="text-muted text-sm" style="line-height:1.8">
+          ① เพิ่ม Process ทางซ้าย<br>
+          ② เลือก Algorithm &amp; Mode<br>
+          ③ กด <b>Run Simulation</b>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gantt card (hidden until run) -->
+    <div class="card" id="gantt-card" hidden>
+      <div class="card-header">
+        <span class="card-title">📊 Gantt Chart</span>
+        <span class="text-muted text-sm" id="algo-badge" style="margin-left:auto"></span>
+      </div>
+      <div class="card-body">
+        <div class="gantt-scroll">
+          <div id="gantt-inner"></div>
+        </div>
+        <div class="legend" id="gantt-legend"></div>
+      </div>
+    </div>
+  </div><!-- end right -->
+
+</div><!-- end main grid -->
+
+<!-- RUN BAR -->
+<div class="run-bar">
+  <button class="btn-run" onclick="runSimulation()">▶ Run Simulation</button>
+  <button class="btn btn-ghost" onclick="resetResults()">↩ Reset</button>
+  <div class="text-muted text-sm" id="run-status" style="margin-left:auto"></div>
+</div>
+
+<!-- RESULTS AREA -->
+<div id="results-area" hidden>
+
+  <div class="metrics-grid" id="metrics-grid"></div>
+
+  <div class="card" style="margin-bottom:1.125rem">
+    <div class="card-header"><span class="card-title">📋 ผลลัพธ์ต่อ Process</span></div>
+    <div style="overflow-x:auto">
+      <table class="rtbl">
+        <thead>
+          <tr>
+            <th>Process</th><th>AT</th><th>BT</th><th>Priority</th>
+            <th>CT</th><th>TAT</th><th>WT</th><th>RT</th>
+          </tr>
+        </thead>
+        <tbody id="res-tbody"></tbody>
+      </table>
+    </div>
+    <div style="padding:0.45rem 0.875rem;font-size:0.68rem;color:var(--text-muted);border-top:1px solid var(--border);line-height:1.8">
+      AT=Arrival Time &nbsp;·&nbsp; BT=Burst Time &nbsp;·&nbsp; CT=Completion Time &nbsp;·&nbsp;
+      TAT=Turnaround Time (CT−AT) &nbsp;·&nbsp; WT=Waiting Time (TAT−BT) &nbsp;·&nbsp; RT=Response Time (first CPU−AT)
+    </div>
+  </div>
+
+  <div class="card" id="cmp-card" hidden style="margin-bottom:1.5rem">
+    <div class="card-header"><span class="card-title">⚖ เปรียบเทียบ Algorithm ทั้งหมด</span></div>
+    <div style="overflow-x:auto">
+      <table class="ctbl">
+        <thead>
+          <tr><th>Algorithm</th><th>Avg WT</th><th>Avg TAT</th><th>Avg RT</th><th>CPU Util.</th></tr>
+        </thead>
+        <tbody id="cmp-tbody"></tbody>
+      </table>
+    </div>
+    <div style="padding:0.45rem 0.875rem;font-size:0.68rem;color:var(--text-muted);border-top:1px solid var(--border)">
+      🟢 = ค่าดีที่สุดในแต่ละ metric &nbsp;·&nbsp; <span class="tag tag-blue">current</span> = algorithm ที่เลือกอยู่
+    </div>
+  </div>
+
+</div>
+<div style="height:2rem"></div>
+
+<script>
+/* ─── CONSTANTS ─── */
+const COLORS = [
+  '#6366f1','#22d3a5','#f59e0b','#f43f5e','#a78bfa',
+  '#38bdf8','#fb923c','#34d399','#e879f9','#facc15','#4ade80','#60a5fa'
+];
+
+const ALGO_INFO = {
+  fcfs: 'First-Come First-Served — Process ที่มาถึงก่อนได้รับ CPU ก่อน (Non-Preemptive เสมอ) อาจเกิด Convoy Effect หาก Long Process มาถึงก่อน',
+  sjf:  'Non-Preemptive: เลือก Burst Time สั้นสุดจาก Ready Queue\nPreemptive (SRTF): Preempt เมื่อ Process ใหม่มี Remaining Time สั้นกว่า — ให้ Avg WT ต่ำสุดในทางทฤษฎี',
+  rr:   'แต่ละ Process ได้ CPU ทีละ q time units แล้วส่งกลับท้าย Queue — เหมาะสำหรับ Time-Sharing; ค่า q มีผลต่อ Response Time และ Context Switch Overhead',
+  priority: 'Non-Preemptive: เลือก Priority สูงสุดจาก Ready Queue\nPreemptive: Preempt เมื่อมี Process ใหม่ Priority สูงกว่า — ⚠️ เสี่ยง Starvation ใน Low-Priority Process'
+};
+
+/* ─── STATE ─── */
+let procs = [], pidN = 1, lastSim = null;
+
+/* ─── THEME ─── */
+function initTheme() {
+  try {
+    const s = localStorage.getItem('cpusim-theme');
+    if (s) { document.documentElement.setAttribute('data-theme', s); document.getElementById('theme-btn').textContent = s==='dark'?'☀️':'🌙'; }
+  } catch(e) {}
+}
+function toggleTheme() {
+  const c = document.documentElement.getAttribute('data-theme');
+  const n = c==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme', n);
+  document.getElementById('theme-btn').textContent = n==='dark'?'☀️':'🌙';
+  try { localStorage.setItem('cpusim-theme', n); } catch(e) {}
+}
+
+/* ─── ALGO UI ─── */
+function onAlgoChange() {
+  const a = document.getElementById('algo-sel').value;
+  document.getElementById('mode-row').hidden  = (a==='fcfs'||a==='rr');
+  document.getElementById('rr-row').hidden    = (a!=='rr');
+  document.getElementById('prio-row').hidden  = (a!=='priority');
+  document.getElementById('algo-info').textContent = ALGO_INFO[a]||'';
+  if (a==='fcfs') { document.querySelector('input[name="mode"][value="np"]').checked=true; syncPills('mode'); }
+}
+
+function syncPills(name) {
+  const val = document.querySelector(`input[name="${name}"]:checked`)?.value;
+  if (name==='mode') {
+    document.getElementById('pill-np').classList.toggle('on', val==='np');
+    document.getElementById('pill-p').classList.toggle('on',  val==='p');
+  } else {
+    document.getElementById('pill-lower').classList.toggle('on',  val==='lower');
+    document.getElementById('pill-higher').classList.toggle('on', val==='higher');
+  }
+}
+
+/* ─── PROCESS MANAGEMENT ─── */
+function addProcess() {
+  const pid = (document.getElementById('inp-pid').value.trim()||`P${pidN}`).slice(0,5);
+  const at = Number(document.getElementById('inp-at').value || 0);
+  const bt = Number(document.getElementById('inp-bt').value);
+  const pr = Number(document.getElementById('inp-pr').value || 1);
+  if(!/^[A-Za-z][A-Za-z0-9_-]{0,4}$/.test(pid) || pid.toLowerCase()==='idle'){toast('PID ต้องเริ่มด้วยตัวอักษร ใช้ A–Z, 0–9, _ หรือ - และไม่ใช้ idle');return;}
+  if(!Number.isInteger(at)||at<0||at>1000||!Number.isInteger(bt)||bt<1||bt>1000||!Number.isInteger(pr)||pr<1||pr>999){toast('Arrival 0–1000, Burst 1–1000, Priority 1–999 ต้องเป็นจำนวนเต็ม');return;}
+  if (!bt||bt<1) { toast('⚠️ Burst Time ต้อง ≥ 1'); return; }
+  if (procs.find(p=>p.id===pid)) { toast(`⚠️ PID "${pid}" ซ้ำ`); return; }
+  if (procs.length>=10) { toast('⚠️ รองรับสูงสุด 10 Processes'); return; }
+  procs.push({ id:pid, at, bt, pr, color:COLORS[procs.length%COLORS.length] });
+  pidN++;
+  document.getElementById('inp-pid').value=`P${pidN}`;
+  document.getElementById('inp-at').value='';
+  document.getElementById('inp-bt').value='';
+  document.getElementById('inp-pr').value='';
+  renderProcTbl();
+  document.getElementById('inp-bt').focus();
+}
+
+function removeProc(pid) {
+  procs=procs.filter(p=>p.id!==pid);
+  procs.forEach((p,i)=>p.color=COLORS[i%COLORS.length]);
+  renderProcTbl();
+}
+
+function clearAll() {
+  procs=[]; pidN=1;
+  document.getElementById('inp-pid').value='P1';
+  renderProcTbl(); resetResults();
+}
+
+function loadPreset() {
+  procs=[];
+  [['P1',0,10,3],['P2',1,1,1],['P3',2,2,3],['P4',3,1,4],['P5',4,5,2]]
+    .forEach(([id,at,bt,pr],i)=>procs.push({id,at,bt,pr,color:COLORS[i]}));
+  pidN=6; document.getElementById('inp-pid').value='P6';
+  renderProcTbl(); toast('✅ โหลดตัวอย่าง 5 Processes');
+}
+
+function updateProcess(pid, field, input) {
+  const p=procs.find(p=>p.id===pid);
+  const limits={at:[0,1000,'AT'],bt:[1,1000,'BT'],pr:[1,999,'Priority']};
+  if(!p || !limits[field])return;
+  const [min,max,label]=limits[field], value=Number(input.value);
+  if(input.value.trim()==='' || !Number.isInteger(value) || value<min || value>max){
+    toast(`${label} ต้องเป็นจำนวนเต็ม ${min}–${max} — คืนค่าเดิมแล้ว`);
+    input.value=p[field];
+    return;
+  }
+  if(value===p[field])return;
+  p[field]=value;
+  resetResults();
+  document.getElementById('run-status').textContent=`แก้ไข ${pid} ${label} = ${value} แล้ว — กด Run Simulation เพื่อเริ่มใหม่`;
+}
+
+function renderProcTbl() {
+  const tbl=document.getElementById('proc-tbl'), emp=document.getElementById('proc-empty');
+  if (!procs.length) { tbl.hidden=true; emp.hidden=false; document.getElementById('proc-count').textContent=''; return; }
+  tbl.hidden=false; emp.hidden=true;
+  document.getElementById('proc-count').textContent=`${procs.length} process${procs.length>1?'es':''}`;
+  document.getElementById('proc-tbody').innerHTML=procs.map(p=>`
+    <tr>
+      <td><div class="pid-cell"><div class="dot" style="background:${p.color}"></div>${p.id}</div></td>
+      ${[['at','AT',0,1000],['bt','BT',1,1000],['pr','Priority',1,999]].map(([field,label,min,max])=>`<td><input class="process-value" type="number" value="${p[field]}" min="${min}" max="${max}" step="1" aria-label="${p.id} ${label}" onchange="updateProcess('${p.id}','${field}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></td>`).join('')}
+      <td><button class="btn btn-del" onclick="removeProc('${p.id}')">✕</button></td>
+    </tr>`).join('');
+}
+
+function runAlgo(ps, alg, mode, q, lb) {
+  return scheduleResult(ps, {
+    alg: alg || document.getElementById('algo-sel').value,
+    mode: mode || document.querySelector('[name="mode"]:checked').value,
+    q: q || Number(document.getElementById('rr-q').value),
+    lower: lb === undefined ? document.querySelector('[name="pconv"]:checked').value === 'lower' : lb
+  });
+}
+
+function getLabel() {
+  const a=document.getElementById('algo-sel').value;
+  const m=document.querySelector('input[name="mode"]:checked')?.value||'np';
+  const q=parseInt(document.getElementById('rr-q').value)||2;
+  if(a==='fcfs') return 'FCFS';
+  if(a==='sjf')  return m==='p'?'SJF Preemptive (SRTF)':'SJF Non-Preemptive';
+  if(a==='rr')   return `Round-Robin (q = ${q})`;
+  if(a==='priority') return `Priority ${m==='p'?'Preemptive':'Non-Preemptive'}`;
+}
+
+/* ─── RUN SIMULATION ─── */
+function runSimulation() {
+  if(!procs.length){toast('⚠️ เพิ่ม Process ก่อน');return;}
+  let result;
+  try{result=runAlgo(procs);}catch(e){toast('❌ '+e.message);console.error(e);return;}
+  lastSim=result;
+  const label=getLabel();
+  document.getElementById('algo-badge').textContent=label;
+  document.getElementById('run-status').innerHTML=`<span class="tag tag-blue">${label}</span>&nbsp; ${procs.length} processes`;
+  document.getElementById('placeholder-card').hidden=true;
+  document.getElementById('gantt-card').hidden=false;
+  renderGantt(result.g);
+  renderMetrics(result.r);
+  renderResTbl(result.r);
+  const showCmp=document.getElementById('chk-cmp').checked;
+  document.getElementById('cmp-card').hidden=!showCmp;
+  if(showCmp) renderCmp();
+  document.getElementById('results-area').hidden=false;
+  document.getElementById('results-area').scrollIntoView({behavior:'smooth',block:'start'});
+  toast(`✅ ${label}`);
+}
+
+/* ─── GANTT RENDER ─── */
+function colorMap() { return Object.fromEntries(procs.map(p=>[p.id,p.color])); }
+
+function buildTicks(s,e,span) {
+  const ts=new Set([s,e]);
+  let step=1;
+  if(span>100)step=20; else if(span>50)step=10; else if(span>25)step=5; else if(span>15)step=2;
+  for(let t=s;t<=e;t+=step)ts.add(t);
+  return [...ts].sort((a,b)=>a-b);
+}
+
+function renderGantt(gantt) {
+  if(!gantt.length) return;
+  const cm=colorMap();
+  const te=gantt[gantt.length-1].e, ts=gantt[0].s, span=te-ts;
+  const PX=Math.max(34,Math.min(70,880/Math.max(span,1)));
+  const W=span*PX;
+
+  // Row
+  let row=`<div class="grow" style="width:${W}px">`;
+  gantt.forEach(b=>{
+    const w=Math.max((b.e-b.s)*PX-2,2);
+    if(b.id==='idle'){
+      row+=`<div class="gblk idle" style="width:${w}px" data-s="${b.s}" data-e="${b.e}" data-id="idle">idle</div>`;
+    } else {
+      const c=cm[b.id]||'#6366f1', lbl=w>=22?b.id:'';
+      row+=`<div class="gblk" style="width:${w}px;background:${c}" data-s="${b.s}" data-e="${b.e}" data-id="${b.id}">${lbl}</div>`;
+    }
+  });
+  row+='</div>';
+
+  // Timeline
+  const ticks=buildTicks(ts,te,span);
+  let tl=`<div class="gtl" style="width:${W}px;position:relative">`;
+  ticks.forEach(t=>{tl+=`<div class="tick" style="left:${(t-ts)*PX}px">${t}</div>`;});
+  tl+='</div>';
+
+  document.getElementById('gantt-inner').innerHTML=row+tl;
+
+  // Legend
+  const seen=new Set(); let leg='';
+  gantt.forEach(b=>{
+    if(seen.has(b.id))return; seen.add(b.id);
+    if(b.id==='idle'){leg+=`<div class="leg-item"><div class="leg-sw" style="background:var(--idle-bg);border:1px dashed var(--border-strong)"></div>Idle</div>`;return;}
+    const c=cm[b.id]||'#6366f1', p=procs.find(x=>x.id===b.id);
+    leg+=`<div class="leg-item"><div class="leg-sw" style="background:${c}"></div>${b.id} (AT=${p?.at}, BT=${p?.bt})</div>`;
+  });
+  document.getElementById('gantt-legend').innerHTML=leg;
+
+  // Tooltips
+  document.querySelectorAll('.gblk').forEach(el=>{
+    el.addEventListener('mouseenter',()=>{
+      const pid=el.dataset.id,s=el.dataset.s,e=el.dataset.e,dur=+e-+s;
+      let txt='';
+      if(pid==='idle'){txt=`⏳ Idle\nTime: ${s} → ${e} (${dur} units)`;}
+      else{
+        const p=procs.find(x=>x.id===pid), rv=lastSim?.r?.[pid];
+        txt=`${pid}  [${s} → ${e}]  (${dur}u)`;
+        if(p)txt+=`\nAT:${p.at}  BT:${p.bt}  Prio:${p.pr}`;
+        if(rv)txt+=`\nWT:${rv.wt}  TAT:${rv.tat}  RT:${rv.rt}`;
+      }
+      const tip=document.getElementById('tooltip');
+      tip.textContent=txt; tip.style.display='block';
+    });
+    el.addEventListener('mousemove',ev=>{
+      const tip=document.getElementById('tooltip');
+      tip.style.left=(ev.clientX+14)+'px'; tip.style.top=(ev.clientY-10)+'px';
+    });
+    el.addEventListener('mouseleave',()=>{document.getElementById('tooltip').style.display='none';});
+  });
+}
+
+/* ─── METRICS ─── */
+function renderMetrics(res) {
+  const vs=Object.values(res),n=vs.length;
+  const avgWT=(vs.reduce((s,r)=>s+r.wt,0)/n).toFixed(2);
+  const avgTAT=(vs.reduce((s,r)=>s+r.tat,0)/n).toFixed(2);
+  const avgRT=(vs.reduce((s,r)=>s+r.rt,0)/n).toFixed(2);
+  const maxCT=Math.max(...vs.map(r=>r.ct));
+  const util=(procs.reduce((s,p)=>s+p.bt,0)/maxCT*100).toFixed(1);
+  document.getElementById('metrics-grid').innerHTML=`
+    <div class="metric-card"><div class="metric-val" style="color:#6366f1">${avgWT}</div><div class="metric-lbl">Avg Waiting Time</div></div>
+    <div class="metric-card"><div class="metric-val" style="color:#22d3a5">${avgTAT}</div><div class="metric-lbl">Avg Turnaround Time</div></div>
+    <div class="metric-card"><div class="metric-val" style="color:#f59e0b">${avgRT}</div><div class="metric-lbl">Avg Response Time</div></div>
+    <div class="metric-card"><div class="metric-val" style="color:#f43f5e">${util}%</div><div class="metric-lbl">CPU Utilization</div></div>`;
+}
+
+/* ─── RESULTS TABLE ─── */
+function renderResTbl(res) {
+  const vs=Object.values(res),n=vs.length;
+  const avgWT=(vs.reduce((s,r)=>s+r.wt,0)/n).toFixed(2);
+  const avgTAT=(vs.reduce((s,r)=>s+r.tat,0)/n).toFixed(2);
+  const avgRT=(vs.reduce((s,r)=>s+r.rt,0)/n).toFixed(2);
+  let rows=procs.map(p=>{
+    const rv=res[p.id]; if(!rv)return'';
+    return `<tr>
+      <td><div class="pid-cell"><div class="dot" style="background:${p.color}"></div>${p.id}</div></td>
+      <td>${p.at}</td><td>${p.bt}</td><td>${p.pr}</td>
+      <td>${rv.ct}</td>
+      <td style="color:var(--success)">${rv.tat}</td>
+      <td style="color:#6366f1">${rv.wt}</td>
+      <td style="color:var(--warning)">${rv.rt}</td>
+    </tr>`;
+  }).join('');
+  rows+=`<tr class="avg-row">
+    <td colspan="4" style="font-family:var(--sans);font-weight:600">📊 Average</td>
+    <td>—</td>
+    <td style="color:var(--success)">${avgTAT}</td>
+    <td style="color:#6366f1">${avgWT}</td>
+    <td style="color:var(--warning)">${avgRT}</td>
+  </tr>`;
+  document.getElementById('res-tbody').innerHTML=rows;
+}
+
+/* ─── COMPARISON ─── */
+function renderCmp() {
+  const lb=document.querySelector('input[name="pconv"][value="lower"]').checked;
+  const q=parseInt(document.getElementById('rr-q').value)||2;
+  const cur=getLabel();
+  const algos=[
+    {label:'FCFS',                      fn:()=>runAlgo(procs,'fcfs')},
+    {label:'SJF Non-Preemptive',        fn:()=>runAlgo(procs,'sjf','np')},
+    {label:'SJF Preemptive (SRTF)',     fn:()=>runAlgo(procs,'sjf','p')},
+    {label:`Round-Robin (q=${q})`,      fn:()=>runAlgo(procs,'rr',null,q)},
+    {label:'Priority Non-Preemptive',   fn:()=>runAlgo(procs,'priority','np',null,lb)},
+    {label:'Priority Preemptive',       fn:()=>runAlgo(procs,'priority','p',null,lb)},
+  ];
+  const stats=algos.map(a=>{
+    try{
+      const {g,r}=a.fn(), vs=Object.values(r), n=vs.length;
+      const avgWT=vs.reduce((s,v)=>s+v.wt,0)/n;
+      const avgTAT=vs.reduce((s,v)=>s+v.tat,0)/n;
+      const avgRT=vs.reduce((s,v)=>s+v.rt,0)/n;
+      const util=(procs.reduce((s,p)=>s+p.bt,0)/Math.max(...vs.map(v=>v.ct))*100).toFixed(1);
+      return {label:a.label,avgWT,avgTAT,avgRT,util};
+    }catch(e){return{label:a.label,err:true};}
+  });
+  const eps=0.001;
+  const bWT=Math.min(...stats.filter(s=>!s.err).map(s=>s.avgWT));
+  const bTAT=Math.min(...stats.filter(s=>!s.err).map(s=>s.avgTAT));
+  const bRT=Math.min(...stats.filter(s=>!s.err).map(s=>s.avgRT));
+  document.getElementById('cmp-tbody').innerHTML=stats.map(s=>{
+    if(s.err)return`<tr><td>${s.label}</td><td colspan="4" class="text-muted">—</td></tr>`;
+    const isCur=s.label===cur;
+    const wB=Math.abs(s.avgWT-bWT)<eps, tB=Math.abs(s.avgTAT-bTAT)<eps, rB=Math.abs(s.avgRT-bRT)<eps;
+    return `<tr class="${isCur?'cur-row':''}">
+      <td>${s.label}${isCur?' <span class="tag tag-blue">current</span>':''}</td>
+      <td class="${wB?'best':''}">${s.avgWT.toFixed(2)}${wB?' 🟢':''}</td>
+      <td class="${tB?'best':''}">${s.avgTAT.toFixed(2)}${tB?' 🟢':''}</td>
+      <td class="${rB?'best':''}">${s.avgRT.toFixed(2)}${rB?' 🟢':''}</td>
+      <td>${s.util}%</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─── RESET ─── */
+function resetResults() {
+  document.getElementById('results-area').hidden=true;
+  document.getElementById('placeholder-card').hidden=false;
+  document.getElementById('gantt-card').hidden=true;
+  document.getElementById('run-status').innerHTML='';
+  lastSim=null;
+}
+
+/* ─── TOAST ─── */
+let tTimer;
+function toast(msg) {
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(tTimer); tTimer=setTimeout(()=>el.classList.remove('show'),3000);
+}
+
+/* ─── KEYBOARD ─── */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&['inp-pid','inp-at','inp-bt','inp-pr'].includes(document.activeElement?.id)) addProcess();
+});
+
+/* ─── INIT ─── */
+initTheme();
+onAlgoChange();
+renderProcTbl();
+document.getElementById('inp-pid').value='P1';
+document.getElementById('inp-at').value='0';
+</script>
+
+<script src="playback.js"></script>
+</html>

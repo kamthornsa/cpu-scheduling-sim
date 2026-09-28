@@ -1,0 +1,48 @@
+const {chromium}=require('C:/Users/kamthorn/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{
+const browser=await chromium.launch({headless:true,channel:"msedge"});const page=await browser.newPage({viewport:{width:1280,height:900}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto('file:///D:/Co-Work/cpu-sim/cpu-scheduler.html');
+await page.getByRole('button',{name:'📂 ตัวอย่าง'}).click();
+await page.selectOption('#algo-sel','sjf');await page.locator('#pill-p').click();
+await page.getByRole('button',{name:'▶ Run Simulation',exact:true}).click();
+await page.locator('#pause').click();
+await page.locator('#next').click();
+if(await page.locator('#clock').textContent()!=='1')throw Error('step time');
+if(!(await page.locator('#cpu').textContent()).includes('P2'))throw Error('preemption CPU');
+await page.locator('#back').click();
+if(await page.locator('#clock').textContent()!=='0')throw Error('back');
+if((await page.locator('#res-tbody').textContent()).includes('19'))throw Error('future leakage');
+for(let i=0;i<19;i++)await page.locator('#next').click();
+if(!(await page.locator('#cpu').textContent()).includes('Completed'))throw Error('completion');
+await page.locator('#back').click();if(!(await page.locator('#metrics-grid').textContent()).includes('จะแสดง'))throw Error('rewind metrics');
+await page.getByRole('button',{name:'↩ Reset',exact:true}).click();
+if(await page.locator('.live-card').isVisible())throw Error('reset');
+await page.getByRole('button',{name:'▶ Run Simulation',exact:true}).click();
+await page.waitForTimeout(450);await page.locator('#pause').click();
+const t=Number(await page.locator('#clock').textContent());if(t<=0||t>=1)throw Error('fraction animation '+t);
+await page.waitForTimeout(350);
+if(Number(await page.locator('#clock').textContent())!==t)throw Error('clock advanced while paused');
+await page.locator('#play').click();await page.waitForTimeout(250);await page.locator('#pause').click();
+if(Number(await page.locator('#clock').textContent())<=t)throw Error('resume did not advance');
+await page.screenshot({path:'simulation-desktop.png',fullPage:true});
+await page.setViewportSize({width:390,height:844});await page.screenshot({path:'simulation-mobile.png',fullPage:true});
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('mobile overflow');
+// Edit the existing problem, reject invalid input, and rerun with the new values.
+await page.getByLabel('P1 BT',{exact:true}).fill('3');
+await page.getByLabel('P1 BT',{exact:true}).press('Enter');
+if(await page.locator('.live-card').isVisible())throw Error('edit did not invalidate timeline');
+await page.getByLabel('P1 AT',{exact:true}).fill('5');await page.getByLabel('P1 AT',{exact:true}).press('Tab');
+await page.getByLabel('P1 Priority',{exact:true}).fill('2');await page.getByLabel('P1 Priority',{exact:true}).press('Enter');
+await page.getByLabel('P1 BT',{exact:true}).fill('0');await page.getByLabel('P1 BT',{exact:true}).press('Enter');
+if(await page.getByLabel('P1 BT',{exact:true}).inputValue()!=='3')throw Error('invalid value did not restore');
+if(await page.locator('#proc-tbody tr').count()!==5)throw Error('edit changed process count');
+await page.getByRole('button',{name:'▶ Run Simulation',exact:true}).click();await page.locator('#pause').click();
+if(!(await page.locator('#cpu').textContent()).includes('Idle'))throw Error('edited AT ignored');
+const edited=await page.locator('#res-tbody tr').first().locator('td').allTextContents();
+if(edited.slice(0,4).join(',')!=='P1,5,3,2')throw Error('edited values not used');
+if(errors.length)throw Error(errors.join('\n'));
+console.log('PASS: browser playback, preemption, forward/back, completion, reset, fractional animation, mobile width; no JS errors');
+await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});
+
